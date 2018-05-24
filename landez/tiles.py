@@ -6,16 +6,16 @@ import json
 import mimetypes
 import uuid
 
-from StringIO import StringIO
+import io
 
-from mbutil import disk_to_mbtiles
+from mbutil.util import disk_to_mbtiles
 
 from . import (DEFAULT_TILES_URL, DEFAULT_TILES_SUBDOMAINS,
                DEFAULT_TMP_DIR, DEFAULT_FILEPATH, DEFAULT_TILE_SIZE,
                DEFAULT_TILE_FORMAT, DEFAULT_TILE_SCHEME)
-from proj import GoogleProjection
-from cache import Disk, Dummy
-from sources import (MBTilesReader, TileDownloader, WMSReader,
+from .proj import GoogleProjection
+from .cache import Disk, Dummy
+from .sources import (MBTilesReader, TileDownloader, WMSReader,
                      MapnikRenderer, ExtractionError, DownloadError)
 
 has_pil = False
@@ -161,37 +161,37 @@ class TilesManager(object):
         self.cache.basename += filter_.basename
         self._filters.append(filter_)
 
-    def tile(self, (z, x, y)):
+    def tile(self, z, x, y):
         """
         Return the tile (binary) content of the tile and seed the cache.
         """
         logger.debug(_("tile method called with %s") % ([z, x, y]))
 
-        output = self.cache.read((z, x, y))
+        output = self.cache.read(z, x, y)
         if output is None:
             output = self.reader.tile(z, x, y)
             # Blend layers
             if len(self._layers) > 0:
                 logger.debug(_("Will blend %s layer(s)") % len(self._layers))
-                output = self._blend_layers(output, (z, x, y))
+                output = self._blend_layers(output, z, x, y)
             # Apply filters
             for f in self._filters:
                 image = f.process(self._tile_image(output))
                 output = self._image_tile(image)
             # Save result to cache
-            self.cache.save(output, (z, x, y))
+            self.cache.save(output, z, x, y)
 
             self.rendered += 1
         return output
 
-    def grid(self, (z, x, y)):
+    def grid(self, z, x, y):
         """ Return the UTFGrid content """
         # sources.py -> MapnikRenderer -> grid
         content = self.reader.grid(z, x, y, self.grid_fields, self.grid_layer)
         return content
 
 
-    def _blend_layers(self, imagecontent, (z, x, y)):
+    def _blend_layers(self, imagecontent, z, x, y):
         """
         Merge tiles of all layers into the specified tile path
         """
@@ -201,7 +201,7 @@ class TilesManager(object):
             try:
                 # Prepare tile of overlay, if available
                 overlay = self._tile_image(layer.tile((z, x, y)))
-            except (IOError, DownloadError, ExtractionError), e:
+            except (IOError, DownloadError, ExtractionError) as  e:
                 logger.warn(e)
                 continue
             # Extract alpha mask
@@ -219,11 +219,11 @@ class TilesManager(object):
         """
         Tile binary content as PIL Image.
         """
-        image = Image.open(StringIO(data))
+        image = Image.open(io.StringIO(data))
         return image.convert('RGBA')
 
     def _image_tile(self, image):
-        out = StringIO()
+        out = io.StringIO()
         image.save(out, self._tile_extension[1:])
         return out.getvalue()
 
@@ -319,7 +319,7 @@ class MBTilesBuilder(TilesManager):
         self.rendered = 0
         for (z, x, y) in tileslist:
             try:
-                self._gather((z, x, y))
+                self._gather(z, x, y)
             except Exception as e:
                 logger.warn(e)
                 if not self.ignore_errors:
@@ -328,7 +328,7 @@ class MBTilesBuilder(TilesManager):
         logger.debug(_("%s tiles were missing.") % self.rendered)
 
         # Some metadata
-        middlezoom = self.zoomlevels[len(self.zoomlevels)/2]
+        middlezoom = self.zoomlevels[len(self.zoomlevels)//2]
         lat = self.bounds[1] + (self.bounds[3] - self.bounds[1])/2
         lon = self.bounds[0] + (self.bounds[2] - self.bounds[0])/2
         metadata = {}
@@ -362,21 +362,21 @@ class MBTilesBuilder(TilesManager):
 
         try:
             os.remove("%s-journal" % self.filepath)  # created by mbutil
-        except OSError, e:
+        except OSError as e:
             pass
         self._clean_gather()
 
-    def _gather(self, (z, x, y)):
-        files_dir, tile_name = self.cache.tile_file((z, x, y))
+    def _gather(self, z, x, y):
+        files_dir, tile_name = self.cache.tile_file(z, x, y)
         tmp_dir = os.path.join(self.tmp_dir, files_dir)
         if not os.path.isdir(tmp_dir):
             os.makedirs(tmp_dir)
-        tilecontent = self.tile((z, x, y))
+        tilecontent = self.tile(z, x, y)
         tilepath = os.path.join(tmp_dir, tile_name)
         with open(tilepath, 'wb') as f:
             f.write(tilecontent)
         if len(self.grid_fields) > 0:
-            gridcontent = self.grid((z, x, y))
+            gridcontent = self.grid(z, x, y)
             gridpath = "%s.%s" % (os.path.splitext(tilepath)[0], 'grid.json')
             with open(gridpath, 'w') as f:
                 f.write(gridcontent)

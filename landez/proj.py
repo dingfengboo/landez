@@ -71,7 +71,7 @@ class GoogleProjection(object):
         x, y = self.project_pixels(position, zoom)
         return (zoom, int(x/self.tilesize), int(y/self.tilesize))
 
-    def tile_bbox(self, (z, x, y)):
+    def tile_bbox(self, z, x, y):
         """
         Returns the WGS84 bbox of the specified tile
         """
@@ -81,7 +81,7 @@ class GoogleProjection(object):
         se = self.unproject_pixels(bottomright, z)
         return nw + se
 
-    def project(self, (lng, lat)):
+    def project(self, lng, lat):
         """
         Returns the coordinates in meters from WGS84
         """
@@ -91,7 +91,7 @@ class GoogleProjection(object):
         y = log(tan((pi / 4) + (y / 2)))
         return (x*EARTH_RADIUS, y*EARTH_RADIUS)
 
-    def unproject(self, (x, y)):
+    def unproject(self, x, y):
         """
         Returns the coordinates from position in meters
         """
