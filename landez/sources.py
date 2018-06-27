@@ -154,6 +154,18 @@ class TileDownloader(TileSource):
         self.basename = parsed.netloc+parsed.path
         self.headers = headers or {}
 
+    def toQuadKey(self, x, y, z):
+        index = ''
+        for i in range(z,0,-1):
+            b = 0
+            mask = 1 << (i - 1)
+            if ((x & mask) != 0):
+                b = b + 1
+            if ((y & mask) != 0):
+                b = b +2
+            index = index + str(b)
+        return index
+
     def tile(self, z, x, y):
         """
         Download the specified tile from `tiles_url`
@@ -163,7 +175,12 @@ class TileDownloader(TileSource):
         size = self.tilesize
         s = self.tiles_subdomains[(x + y) % len(self.tiles_subdomains)];
         try:
-            url = self.tiles_url.format(**locals())
+            #https://ecn.t1.tiles.virtualearth.net/tiles/a132032032020032103.jpeg?g=6528
+            if (self.tiles_url.find('virtualearth.net') > 0):
+                a = self.toQuadKey(x, y, z)
+                url = 'https://ecn.{}.tiles.virtualearth.net/tiles/a{}.jpeg?g=6528'.format(s, a)
+            else:
+                url = self.tiles_url.format(**locals())
         except KeyError as e:
             raise DownloadError(_("Unknown keyword %s in URL") % e)
 
